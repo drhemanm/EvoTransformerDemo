@@ -28,11 +28,11 @@ TRANSACTION_LABELS = [
 ]
 
 DOCUMENT_LABELS = [
-    "risk_disclosure",
+    "business_operations",
     "financial_statement",
     "legal_regulatory",
-    "business_operations",
-    "management_governance"
+    "management_governance",
+    "risk_disclosure"
 ]
 
 # Example NER labels - adjust if needed
