@@ -13,7 +13,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ===============================
-# Label Mappings
+# Label Mappings (MUST MATCH TRAINING ORDER)
 # ===============================
 
 TRANSACTION_LABELS = [
@@ -35,7 +35,7 @@ DOCUMENT_LABELS = [
     "risk_disclosure"
 ]
 
-# Example NER labels - adjust if needed
+# Keep simple static NER labels for now
 NER_LABELS = [
     "O",
     "B-ORG",
@@ -95,33 +95,39 @@ def predict(text, task):
             task=task
         )
 
-    # ---------------------------
+    # ==========================
     # Transaction Classification
-    # ---------------------------
+    # ==========================
     if task == "transaction":
-        pred_id = logits.argmax(-1).item()
+
+        probs = torch.softmax(logits, dim=-1)
+        pred_id = probs.argmax(-1).item()
+        confidence = probs.max().item()
+
         return {
             "task": "transaction",
-            "prediction_id": pred_id,
             "prediction_label": TRANSACTION_LABELS[pred_id],
-            "active_layers": active_layers
+            "confidence": round(confidence, 4)
         }
 
-    # ---------------------------
+    # ==========================
     # Document Classification
-    # ---------------------------
+    # ==========================
     elif task == "document":
-        pred_id = logits.argmax(-1).item()
+
+        probs = torch.softmax(logits, dim=-1)
+        pred_id = probs.argmax(-1).item()
+        confidence = probs.max().item()
+
         return {
             "task": "document",
-            "prediction_id": pred_id,
             "prediction_label": DOCUMENT_LABELS[pred_id],
-            "active_layers": active_layers
+            "confidence": round(confidence, 4)
         }
 
-    # ---------------------------
+    # ==========================
     # Named Entity Recognition
-    # ---------------------------
+    # ==========================
     elif task == "ner":
 
         pred_ids = logits.argmax(-1)[0].cpu().tolist()
@@ -138,10 +144,12 @@ def predict(text, task):
 
         return {
             "task": "ner",
-            "entities": entities,
-            "active_layers": active_layers
+            "entities": entities
         }
 
+    # ==========================
+    # Invalid Task
+    # ==========================
     else:
         return {
             "error": "Invalid task. Use transaction, document, or ner."
