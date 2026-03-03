@@ -17,14 +17,14 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # ===============================
 
 TRANSACTION_LABELS = [
-    "food_grocery",
-    "transport",
-    "utilities",
-    "entertainment",
-    "healthcare",
     "education",
+    "entertainment",
+    "food_grocery",
+    "healthcare",
     "salary_income",
-    "transfer"
+    "transfer",
+    "transport",
+    "utilities"
 ]
 
 DOCUMENT_LABELS = [
