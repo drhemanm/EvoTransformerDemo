@@ -13,7 +13,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ===============================
-# Label Mappings (MUST MATCH TRAINING ORDER)
+# Label Mappings (MATCH TRAINING ORDER)
 # ===============================
 
 TRANSACTION_LABELS = [
@@ -35,7 +35,6 @@ DOCUMENT_LABELS = [
     "risk_disclosure"
 ]
 
-# Keep simple static NER labels for now
 NER_LABELS = [
     "O",
     "B-ORG",
@@ -47,6 +46,22 @@ NER_LABELS = [
     "B-MONEY",
     "I-MONEY"
 ]
+
+
+# ===============================
+# Risk Mapping (Product Layer)
+# ===============================
+
+RISK_MAPPING = {
+    "salary_income": "low",
+    "food_grocery": "low",
+    "utilities": "low",
+    "education": "low",
+    "healthcare": "low",
+    "entertainment": "medium",
+    "transport": "medium",
+    "transfer": "medium"
+}
 
 
 # ===============================
@@ -89,7 +104,7 @@ def predict(text, task):
     attention_mask = enc["attention_mask"].to(DEVICE)
 
     with torch.no_grad():
-        logits, active_layers, _ = model(
+        logits, _, _ = model(
             input_ids,
             attention_mask,
             task=task
@@ -104,10 +119,14 @@ def predict(text, task):
         pred_id = probs.argmax(-1).item()
         confidence = probs.max().item()
 
+        label = TRANSACTION_LABELS[pred_id]
+        risk_level = RISK_MAPPING.get(label, "unknown")
+
         return {
             "task": "transaction",
-            "prediction_label": TRANSACTION_LABELS[pred_id],
-            "confidence": round(confidence, 4)
+            "prediction_label": label,
+            "confidence": round(confidence, 4),
+            "risk_level": risk_level
         }
 
     # ==========================
@@ -119,9 +138,11 @@ def predict(text, task):
         pred_id = probs.argmax(-1).item()
         confidence = probs.max().item()
 
+        label = DOCUMENT_LABELS[pred_id]
+
         return {
             "task": "document",
-            "prediction_label": DOCUMENT_LABELS[pred_id],
+            "prediction_label": label,
             "confidence": round(confidence, 4)
         }
 
