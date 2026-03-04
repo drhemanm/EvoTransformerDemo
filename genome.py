@@ -15,3 +15,8 @@ class EvoGenomeV3:
     use_early_exit: bool = True
     early_exit_threshold: float = 0.50
     use_layernorm: bool = False
+    # Online learning config
+    online_lr: float = 1e-4
+    feedback_batch_size: int = 8
+    max_feedback_buffer: int = 256
+    confidence_threshold: float = 0.85

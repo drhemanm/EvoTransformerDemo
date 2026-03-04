@@ -3,6 +3,7 @@ import torch
 from transformers import DistilBertTokenizer
 from model import EvoTransformerMultiTaskV3
 from genome import EvoGenomeV3
+from feedback import OnlineLearner
 
 
 # ===============================
@@ -81,9 +82,21 @@ WEIGHTS_PATH = os.path.join(BASE_DIR, "evotransformer_v31_weights.pt")
 genome = EvoGenomeV3()
 model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
 
-model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
+# Load live-learned weights if available, otherwise use base weights
+LIVE_WEIGHTS_PATH = WEIGHTS_PATH.replace(".pt", "_live.pt")
+if os.path.exists(LIVE_WEIGHTS_PATH):
+    model.load_state_dict(torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE))
+else:
+    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
+
 model.to(DEVICE)
 model.eval()
+
+# ===============================
+# Online Learner (Live Feedback)
+# ===============================
+
+learner = OnlineLearner(model, genome, DEVICE, tokenizer, WEIGHTS_PATH)
 
 
 # ===============================
