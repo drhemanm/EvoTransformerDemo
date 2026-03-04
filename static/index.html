@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EvoCompliance AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3345;
+    --text: #e4e6f0;
+    --muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --green: #00cec9;
+    --red: #ff6b6b;
+    --orange: #fdcb6e;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #1a1d27 0%, #2d1f5e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .logo { display: flex; align-items: center; gap: .75rem; }
+  .logo-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--green));
+    display: grid; place-items: center; font-size: 1.2rem; font-weight: 700;
+  }
+  .logo h1 { font-size: 1.25rem; font-weight: 700; }
+  .logo span { font-size: .8rem; color: var(--muted); }
+
+  .api-key-box { display: flex; align-items: center; gap: .5rem; }
+  .api-key-box input {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: .5rem .75rem; border-radius: 8px; font-size: .85rem; width: 260px;
+    font-family: monospace;
+  }
+  .api-key-box input:focus { outline: none; border-color: var(--accent); }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--muted);
+    transition: background .3s;
+  }
+  .status-dot.ok { background: var(--green); }
+
+  /* ── Layout ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
+  .tab-btn {
+    padding: .6rem 1.2rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); cursor: pointer;
+    font-size: .9rem; font-weight: 500; transition: all .2s;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tab-btn.active {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.25rem;
+  }
+  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
+
+  /* ── Form Controls ── */
+  textarea, select, input[type="text"] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: .75rem;
+    font-family: 'Inter', sans-serif; font-size: .9rem; resize: vertical;
+  }
+  textarea:focus, select:focus, input[type="text"]:focus {
+    outline: none; border-color: var(--accent);
+  }
+  textarea { min-height: 100px; }
+  label { font-size: .85rem; color: var(--muted); display: block; margin-bottom: .4rem; }
+
+  .form-row { display: flex; gap: 1rem; margin-bottom: 1rem; }
+  .form-row > * { flex: 1; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .7rem 1.5rem; border-radius: 8px; border: none;
+    font-size: .9rem; font-weight: 600; cursor: pointer; transition: all .2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5b4bd5; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-outline {
+    background: transparent; color: var(--accent2); border: 1px solid var(--accent);
+  }
+  .btn-outline:hover { background: rgba(108,92,231,.1); }
+
+  /* ── Results ── */
+  .result-area {
+    min-height: 60px; border-radius: 8px; padding: 1rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    font-size: .9rem; line-height: 1.6;
+  }
+  .result-area.empty { color: var(--muted); font-style: italic; }
+
+  .badge {
+    display: inline-block; padding: .2rem .65rem; border-radius: 20px;
+    font-size: .78rem; font-weight: 600;
+  }
+  .badge-low { background: rgba(0,206,201,.15); color: var(--green); }
+  .badge-medium { background: rgba(253,203,110,.15); color: var(--orange); }
+  .badge-high { background: rgba(255,107,107,.15); color: var(--red); }
+  .badge-unknown { background: rgba(139,143,163,.15); color: var(--muted); }
+
+  .confidence-bar {
+    height: 6px; border-radius: 3px; background: var(--surface);
+    margin-top: .5rem; overflow: hidden;
+  }
+  .confidence-fill {
+    height: 100%; border-radius: 3px; transition: width .6s ease;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+  }
+
+  /* ── NER Tokens ── */
+  .ner-tokens { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .ner-token {
+    padding: .3rem .6rem; border-radius: 6px; font-size: .85rem;
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .ner-token[data-label^="B-"], .ner-token[data-label^="I-"] {
+    border-color: var(--accent); background: rgba(108,92,231,.12);
+  }
+  .ner-token .ner-label {
+    font-size: .65rem; color: var(--accent2); margin-left: .3rem;
+    font-weight: 600; text-transform: uppercase;
+  }
+
+  /* ── Stats Grid ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+  .stat-card {
+    background: var(--surface2); border-radius: var(--radius);
+    padding: 1.25rem; text-align: center;
+  }
+  .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent2); }
+  .stat-label { font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin .6s linear infinite; display: none;
+  }
+  .btn.loading .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem; padding: .75rem 1.25rem;
+    border-radius: 8px; font-size: .85rem; font-weight: 500;
+    transform: translateY(100px); opacity: 0; transition: all .3s;
+    z-index: 100;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: rgba(0,206,201,.15); color: var(--green); border: 1px solid var(--green); }
+  .toast.error { background: rgba(255,107,107,.15); color: var(--red); border: 1px solid var(--red); }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .form-row { flex-direction: column; }
+    header { padding: 1rem; }
+    .api-key-box input { width: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">E</div>
+    <div>
+      <h1>EvoCompliance AI</h1>
+      <span>Multi-task Evolved Transformer</span>
+    </div>
+  </div>
+  <div class="api-key-box">
+    <div class="status-dot" id="statusDot"></div>
+    <input type="password" id="apiKey" placeholder="Enter API key..." />
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="analyse">Analyse</button>
+    <button class="tab-btn" data-tab="feedback">Feedback</button>
+    <button class="tab-btn" data-tab="stats">Learning Stats</button>
+  </div>
+
+  <!-- ==================== ANALYSE TAB ==================== -->
+  <div class="tab-content active" id="tab-analyse">
+    <div class="card">
+      <h2>Text Analysis</h2>
+      <div class="form-row">
+        <div>
+          <label>Task</label>
+          <select id="analyseTask">
+            <option value="transaction">Transaction Classification</option>
+            <option value="document">Document Classification</option>
+            <option value="ner">Named Entity Recognition</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem">
+        <label>Input Text</label>
+        <textarea id="analyseText" placeholder="e.g. Paid $120 to City Hospital for annual checkup"></textarea>
+      </div>
+      <button class="btn btn-primary" id="analyseBtn" onclick="runAnalyse()">
+        <span class="spinner"></span> Analyse
+      </button>
+    </div>
+
+    <div class="card">
+      <h2>Result</h2>
+      <div class="result-area empty" id="analyseResult">Results will appear here...</div>
+    </div>
+  </div>
+
+  <!-- ==================== FEEDBACK TAB ==================== -->
+  <div class="tab-content" id="tab-feedback">
+    <div class="card">
+      <h2>Submit Feedback</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;">
+        Help the model learn by providing the correct label for a text sample.
+      </p>
+      <div class="form-row">
+        <div>
+          <label>Task</label>
+          <select id="fbTask" onchange="updateLabelOptions()">
+            <option value="transaction">Transaction</option>
+            <option value="document">Document</option>
+            <option value="ner">NER</option>
+          </select>
+        </div>
+        <div>
+          <label>Correct Label</label>
+          <select id="fbLabel"></select>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem">
+        <label>Text</label>
+        <textarea id="fbText" placeholder="e.g. Monthly Netflix subscription charge"></textarea>
+      </div>
+      <button class="btn btn-primary" id="fbBtn" onclick="submitFeedback()">
+        <span class="spinner"></span> Submit Feedback
+      </button>
+    </div>
+
+    <div class="card">
+      <h2>Response</h2>
+      <div class="result-area empty" id="fbResult">Feedback response will appear here...</div>
+    </div>
+  </div>
+
+  <!-- ==================== STATS TAB ==================== -->
+  <div class="tab-content" id="tab-stats">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h2 style="margin:0">Live Learning Stats</h2>
+        <button class="btn btn-outline" onclick="loadStats()">Refresh</button>
+      </div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-value">--</div><div class="stat-label">Buffered Samples</div></div>
+        <div class="stat-card"><div class="stat-value">--</div><div class="stat-label">Total Learned</div></div>
+        <div class="stat-card"><div class="stat-value">--</div><div class="stat-label">Learning Rate</div></div>
+        <div class="stat-card"><div class="stat-value">--</div><div class="stat-label">Batch Size</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LABELS = {
+  transaction: ["education","entertainment","food_grocery","healthcare","salary_income","transfer","transport","utilities"],
+  document: ["business_operations","financial_statement","legal_regulatory","management_governance","risk_disclosure"],
+  ner: ["O","B-ORG","I-ORG","B-PER","I-PER","B-LOC","I-LOC","B-MONEY","I-MONEY"]
+};
+
+// ── Tabs ──
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'stats') loadStats();
+  });
+});
+
+// ── API helper ──
+function apiKey() { return document.getElementById('apiKey').value.trim(); }
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey() }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Request failed');
+  document.getElementById('statusDot').classList.add('ok');
+  return data;
+}
+
+// ── Toast ──
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Analyse ──
+async function runAnalyse() {
+  const btn = document.getElementById('analyseBtn');
+  const text = document.getElementById('analyseText').value.trim();
+  const task = document.getElementById('analyseTask').value;
+  if (!text) return toast('Please enter some text', 'error');
+  if (!apiKey()) return toast('Please enter your API key', 'error');
+
+  btn.classList.add('loading'); btn.disabled = true;
+  try {
+    const data = await api('POST', '/analyse', { text, task });
+    document.getElementById('analyseResult').className = 'result-area';
+    document.getElementById('analyseResult').innerHTML = renderResult(data, task);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+  }
+}
+
+function renderResult(data, task) {
+  if (task === 'ner') {
+    const tokens = data.entities.map(e => {
+      const isEntity = e.label !== 'O';
+      return `<span class="ner-token" data-label="${e.label}">${e.token}${isEntity ? `<span class="ner-label">${e.label}</span>` : ''}</span>`;
+    }).join('');
+    return `<div class="ner-tokens">${tokens}</div>`;
+  }
+
+  const conf = (data.confidence * 100).toFixed(1);
+  const label = data.prediction_label.replace(/_/g, ' ');
+  let risk = '';
+  if (data.risk_level) {
+    const cls = { low: 'badge-low', medium: 'badge-medium', high: 'badge-high', unknown: 'badge-unknown' }[data.risk_level] || 'badge-unknown';
+    risk = `<span class="badge ${cls}">${data.risk_level} risk</span>`;
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;">
+      <strong style="font-size:1.15rem;text-transform:capitalize;">${label}</strong>
+      ${risk}
+    </div>
+    <div style="font-size:.85rem;color:var(--muted);">Confidence: ${conf}%</div>
+    <div class="confidence-bar"><div class="confidence-fill" style="width:${conf}%"></div></div>
+  `;
+}
+
+// ── Feedback ──
+function updateLabelOptions() {
+  const task = document.getElementById('fbTask').value;
+  const sel = document.getElementById('fbLabel');
+  sel.innerHTML = LABELS[task].map(l => `<option value="${l}">${l.replace(/_/g, ' ')}</option>`).join('');
+}
+updateLabelOptions();
+
+async function submitFeedback() {
+  const btn = document.getElementById('fbBtn');
+  const text = document.getElementById('fbText').value.trim();
+  const task = document.getElementById('fbTask').value;
+  const correct_label = document.getElementById('fbLabel').value;
+  if (!text) return toast('Please enter some text', 'error');
+  if (!apiKey()) return toast('Please enter your API key', 'error');
+
+  btn.classList.add('loading'); btn.disabled = true;
+  try {
+    const data = await api('POST', '/feedback', { text, task, correct_label });
+    document.getElementById('fbResult').className = 'result-area';
+    document.getElementById('fbResult').innerHTML = `
+      <div style="margin-bottom:.5rem"><strong style="color:var(--green);">${data.status}</strong> &mdash; ${data.message}</div>
+      <div style="font-size:.85rem;color:var(--muted);">
+        Buffered: ${data.stats.feedback_buffered} &bull;
+        Total learned: ${data.stats.total_learned}
+      </div>
+    `;
+    toast('Feedback submitted');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+  }
+}
+
+// ── Stats ──
+async function loadStats() {
+  if (!apiKey()) return;
+  try {
+    const s = await api('GET', '/learning-stats');
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card"><div class="stat-value">${s.feedback_buffered}</div><div class="stat-label">Buffered Samples</div></div>
+      <div class="stat-card"><div class="stat-value">${s.total_learned}</div><div class="stat-label">Total Learned</div></div>
+      <div class="stat-card"><div class="stat-value">${s.learning_rate}</div><div class="stat-label">Learning Rate</div></div>
+      <div class="stat-card"><div class="stat-value">${s.batch_size}</div><div class="stat-label">Batch Size</div></div>
+    `;
+  } catch (e) { /* silent on stats tab load */ }
+}
+</script>
+</body>
+</html>

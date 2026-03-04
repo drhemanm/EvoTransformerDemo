@@ -1,11 +1,22 @@
 import os
 import secrets
+from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 from inference import predict, learner
 
 app = FastAPI(title="EvoCompliance API", version="0.2.0")
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/")
+def root():
+    return FileResponse(str(STATIC_DIR / "index.html"))
 
 API_KEY = os.getenv("EVO_API_KEY")
 
