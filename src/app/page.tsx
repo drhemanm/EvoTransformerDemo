@@ -5,8 +5,10 @@ import {
   analyse,
   submitFeedback,
   getLearningStats,
+  getAnalytics,
   type AnalyseResult,
   type LearningStats,
+  type AnalyticsData,
 } from "@/lib/api";
 
 const TASKS = ["transaction", "document", "ner"] as const;
@@ -54,12 +56,14 @@ const TASK_DESCRIPTIONS: Record<Task, string> = {
 function Card({
   title,
   children,
+  className = "",
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 p-6">
+    <div className={`rounded-xl border border-gray-800 bg-gray-900 p-6 ${className}`}>
       <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
       {children}
     </div>
@@ -85,6 +89,71 @@ function Badge({
     >
       {children}
     </span>
+  );
+}
+
+// ─── Landing / Hero Section ─────────────────────────────────
+
+function HeroSection({ onGetStarted }: { onGetStarted: () => void }) {
+  return (
+    <div className="mb-12 text-center">
+      <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600/20 border border-blue-500/30">
+        <svg className="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+        </svg>
+      </div>
+      <h1 className="mb-3 text-4xl font-bold text-white">EvoCompliance</h1>
+      <p className="mx-auto mb-6 max-w-2xl text-lg text-gray-400">
+        AI-powered compliance intelligence that learns from your feedback.
+        Classify transactions, analyse documents, and extract entities — all from
+        a single adaptive model.
+      </p>
+
+      <div className="mx-auto mb-8 grid max-w-3xl gap-4 md:grid-cols-3">
+        <FeatureCard
+          title="Transaction Classification"
+          description="Categorize financial transactions into 8 categories with automated risk scoring"
+          icon="T"
+        />
+        <FeatureCard
+          title="Document Analysis"
+          description="Classify compliance documents across 5 regulatory categories"
+          icon="D"
+        />
+        <FeatureCard
+          title="Entity Extraction"
+          description="Identify organizations, people, locations, and monetary amounts"
+          icon="E"
+        />
+      </div>
+
+      <div className="mx-auto max-w-2xl rounded-xl border border-blue-800/50 bg-blue-900/20 p-4 mb-6">
+        <p className="text-sm text-blue-300">
+          <strong>What makes this different?</strong> EvoCompliance uses online learning —
+          submit corrections and watch the model improve in real time. No retraining pipelines,
+          no waiting. Your feedback directly shapes the model.
+        </p>
+      </div>
+
+      <button
+        onClick={onGetStarted}
+        className="rounded-lg bg-blue-600 px-8 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
+      >
+        Get Started
+      </button>
+    </div>
+  );
+}
+
+function FeatureCard({ title, description, icon }: { title: string; description: string; icon: string }) {
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5 text-left">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600/20 text-sm font-bold text-blue-400">
+        {icon}
+      </div>
+      <h3 className="mb-1 text-sm font-semibold text-white">{title}</h3>
+      <p className="text-xs text-gray-400">{description}</p>
+    </div>
   );
 }
 
@@ -412,7 +481,110 @@ function StatsPanel() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+// ─── Analytics Dashboard ─────────────────────────────────────
+
+function AnalyticsDashboard() {
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleRefresh() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await getAnalytics();
+      setData(res);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Card title="Usage Analytics" className="md:col-span-2">
+      <p className="mb-4 text-sm text-gray-400">
+        Track API usage, model performance, and learning progress.
+      </p>
+
+      <button
+        onClick={handleRefresh}
+        disabled={loading}
+        className="mb-4 rounded-lg bg-gray-700 px-5 py-2 text-sm font-medium text-gray-200 transition hover:bg-gray-600 disabled:opacity-50"
+      >
+        {loading ? "Loading..." : "Load Analytics"}
+      </button>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 p-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      {data && (
+        <div className="space-y-4">
+          {/* Summary row */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard label="Requests (1h)" value={data.last_hour.total} />
+            <StatCard label="Requests (24h)" value={data.last_24h.total} />
+            <StatCard
+              label="Avg Confidence"
+              value={data.last_24h.avg_confidence !== null
+                ? `${(data.last_24h.avg_confidence * 100).toFixed(1)}%`
+                : "N/A"}
+            />
+            <StatCard label="Total Learned" value={data.learning.total_learned} />
+          </div>
+
+          {/* Task breakdown */}
+          {data.last_24h.total > 0 && (
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
+              <h3 className="mb-3 text-sm font-medium text-gray-300">Requests by Task (24h)</h3>
+              <div className="space-y-2">
+                {Object.entries(data.last_24h.by_task).map(([task, count]) => (
+                  <div key={task} className="flex items-center gap-3">
+                    <span className="w-24 text-xs text-gray-400">{task}</span>
+                    <div className="flex-1">
+                      <div className="h-2 w-full rounded-full bg-gray-700">
+                        <div
+                          className="h-2 rounded-full bg-blue-500 transition-all"
+                          style={{
+                            width: `${(count / data.last_24h.total) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <span className="w-8 text-right text-xs text-gray-400">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Source breakdown */}
+          {data.last_24h.total > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
+                <h3 className="mb-2 text-sm font-medium text-gray-300">Analyses</h3>
+                <div className="text-2xl font-bold text-blue-400">
+                  {data.last_24h.by_source.analyse || 0}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
+                <h3 className="mb-2 text-sm font-medium text-gray-300">Feedback</h3>
+                <div className="text-2xl font-bold text-emerald-400">
+                  {data.last_24h.by_source.feedback || 0}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-3 text-center">
       <div className="text-2xl font-bold text-white">{value}</div>
@@ -421,26 +593,69 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+// ─── Navigation Tabs ─────────────────────────────────────────
+
+type TabId = "home" | "analyse" | "dashboard";
+
+function NavTabs({ active, onChange }: { active: TabId; onChange: (tab: TabId) => void }) {
+  const tabs: { id: TabId; label: string }[] = [
+    { id: "home", label: "Home" },
+    { id: "analyse", label: "Analyse" },
+    { id: "dashboard", label: "Dashboard" },
+  ];
+
+  return (
+    <div className="mb-8 flex gap-1 rounded-lg bg-gray-900 p-1 border border-gray-800">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onChange(tab.id)}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${
+            active === tab.id
+              ? "bg-blue-600 text-white"
+              : "text-gray-400 hover:text-white hover:bg-gray-800"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<TabId>("home");
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold text-white">EvoCompliance</h1>
-        <p className="mt-2 text-gray-400">
-          Compliance intelligence powered by EvoTransformer — classify
-          transactions, documents, and extract named entities.
-        </p>
-      </header>
+      <NavTabs active={activeTab} onChange={setActiveTab} />
 
-      <div className="space-y-6">
-        <AnalysePanel />
-        <div className="grid gap-6 md:grid-cols-2">
-          <FeedbackPanel />
-          <StatsPanel />
+      {activeTab === "home" && (
+        <HeroSection onGetStarted={() => setActiveTab("analyse")} />
+      )}
+
+      {activeTab === "analyse" && (
+        <div className="space-y-6">
+          <AnalysePanel />
+          <div className="grid gap-6 md:grid-cols-2">
+            <FeedbackPanel />
+            <StatsPanel />
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === "dashboard" && (
+        <div className="space-y-6">
+          <AnalyticsDashboard />
+        </div>
+      )}
+
+      {/* Footer */}
+      <footer className="mt-12 border-t border-gray-800 pt-6 text-center text-xs text-gray-500">
+        EvoCompliance v0.3.0 — Powered by EvoTransformer with online learning
+      </footer>
     </div>
   );
 }
