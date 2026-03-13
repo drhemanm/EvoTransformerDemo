@@ -3,7 +3,7 @@ import random
 import logging
 import torch
 import torch.nn as nn
-from transformers import DistilBertTokenizer
+from transformers import DistilBertTokenizer, DistilBertModel
 from model import EvoTransformerMultiTaskV3
 from genome import EvoGenomeV3
 from feedback import OnlineLearner
@@ -77,23 +77,38 @@ tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
 
 # ===============================
-# Load Model Safely
+# Load Pretrained Embeddings
+# ===============================
+
+logger.info("Loading DistilBERT pretrained embeddings...")
+_distilbert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+PRETRAINED_EMBEDDINGS = _distilbert.embeddings.word_embeddings.weight.detach().clone()
+del _distilbert  # Free memory — we only need the embedding matrix
+logger.info("Pretrained embeddings loaded: shape %s", PRETRAINED_EMBEDDINGS.shape)
+
+
+# ===============================
+# Load Model
 # ===============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_PATH = os.path.join(BASE_DIR, "evotransformer_v31_weights.pt")
 
 genome = EvoGenomeV3()
-model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
+model = EvoTransformerMultiTaskV3(
+    genome, 8, 5, 9, pretrained_embeddings=PRETRAINED_EMBEDDINGS
+)
 
-# Load live-learned weights if available, otherwise use base weights
+# Load live-learned weights if available (from previous feedback sessions)
 LIVE_WEIGHTS_PATH = WEIGHTS_PATH.replace(".pt", "_live.pt")
 if os.path.exists(LIVE_WEIGHTS_PATH):
-    model.load_state_dict(torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE, weights_only=True))
-    logger.info("Loaded live weights from %s", LIVE_WEIGHTS_PATH)
-else:
-    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE, weights_only=True))
-    logger.info("Loaded base weights from %s", WEIGHTS_PATH)
+    try:
+        model.load_state_dict(
+            torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE, weights_only=True)
+        )
+        logger.info("Loaded live weights from %s", LIVE_WEIGHTS_PATH)
+    except RuntimeError:
+        logger.warning("Live weights incompatible with new architecture — will retrain")
 
 model.to(DEVICE)
 model.eval()
@@ -215,17 +230,32 @@ BOOTSTRAP_DOCUMENT_DATA = [
 
 
 def _run_bootstrap_training():
-    """Run quick bootstrap training on startup to improve predictions from random weights."""
-    # Skip if already trained (live weights exist)
+    """Train the projection layer and task heads using pretrained embeddings.
+
+    With pretrained embeddings the model already understands language —
+    we only need to train the projection (768→128) and classification heads.
+    This converges in ~50 epochs vs 150+ with random embeddings.
+    """
+    # Skip if already trained (live weights exist and loaded successfully)
     live_path = WEIGHTS_PATH.replace(".pt", "_live.pt")
     if os.path.exists(live_path):
-        logger.info("Live weights found — skipping bootstrap training")
-        return
+        try:
+            state = torch.load(live_path, map_location=DEVICE, weights_only=True)
+            # Check if weights are compatible (have projection layer)
+            if "backbone.embed_projection.weight" in state:
+                logger.info("Compatible live weights found — skipping bootstrap")
+                return
+        except Exception:
+            pass
 
-    logger.info("Running bootstrap training on startup (this takes ~30s)...")
+    logger.info("Running bootstrap training with pretrained embeddings (~15s)...")
 
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2, weight_decay=0.0)
+
+    # Only train the projection layer, task heads, and attention — freeze embeddings
+    trainable_params = [p for n, p in model.named_parameters()
+                        if "token_embedding" not in n and p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=5e-3, weight_decay=0.01)
     loss_fn = nn.CrossEntropyLoss()
 
     all_data = (
@@ -233,7 +263,7 @@ def _run_bootstrap_training():
         + [(text, label, "document") for text, label in BOOTSTRAP_DOCUMENT_DATA]
     )
 
-    num_epochs = 150
+    num_epochs = 50
     for epoch in range(num_epochs):
         random.shuffle(all_data)
         total_loss = 0
@@ -253,13 +283,13 @@ def _run_bootstrap_training():
             optimizer.step()
             total_loss += loss.item()
 
-        if (epoch + 1) % 50 == 0:
+        if (epoch + 1) % 10 == 0:
             logger.info("  Bootstrap epoch %d/%d | avg loss: %.4f",
                         epoch + 1, num_epochs, total_loss / len(all_data))
 
     model.eval()
 
-    # Save as the base weights so bootstrap doesn't re-run
+    # Save trained weights
     torch.save(model.state_dict(), WEIGHTS_PATH)
     logger.info("Bootstrap training complete — weights saved")
 

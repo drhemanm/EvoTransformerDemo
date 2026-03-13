@@ -14,7 +14,7 @@ Usage:
 
 import torch
 import torch.nn as nn
-from transformers import DistilBertTokenizer
+from transformers import DistilBertTokenizer, DistilBertModel
 from model import EvoTransformerMultiTaskV3
 from genome import EvoGenomeV3
 
@@ -162,20 +162,26 @@ def train():
     print("Loading tokenizer...")
     tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
-    print("Building model...")
-    genome = EvoGenomeV3()
-    model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
+    print("Loading pretrained embeddings from DistilBERT...")
+    distilbert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+    pretrained_embeddings = distilbert.embeddings.word_embeddings.weight.detach().clone()
+    del distilbert
 
-    # Load existing weights
-    weights_path = "evotransformer_v31_weights.pt"
-    model.load_state_dict(torch.load(weights_path, map_location=DEVICE, weights_only=True))
+    print("Building model with pretrained embeddings...")
+    genome = EvoGenomeV3()
+    model = EvoTransformerMultiTaskV3(
+        genome, 8, 5, 9, pretrained_embeddings=pretrained_embeddings
+    )
     model.to(DEVICE)
     model.train()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2, weight_decay=0.0)
+    # Only train projection + heads, not the frozen embeddings
+    trainable_params = [p for n, p in model.named_parameters()
+                        if "token_embedding" not in n and p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=5e-3, weight_decay=0.01)
     loss_fn = nn.CrossEntropyLoss()
 
-    NUM_EPOCHS = 300
+    NUM_EPOCHS = 100
 
     # Interleaved multi-task training
     print(f"\nTraining both tasks interleaved ({NUM_EPOCHS} epochs)...")
