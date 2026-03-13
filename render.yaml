@@ -3,7 +3,7 @@ services:
     name: evo-compliance-api
     runtime: docker
     plan: free
-    healthCheckPath: /learning-stats
+    healthCheckPath: /health
     envVars:
       - key: EVO_API_KEY
         generateValue: true

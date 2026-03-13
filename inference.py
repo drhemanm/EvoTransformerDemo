@@ -1,10 +1,12 @@
 import os
+import logging
 import torch
 from transformers import DistilBertTokenizer
 from model import EvoTransformerMultiTaskV3
 from genome import EvoGenomeV3
 from feedback import OnlineLearner
 
+logger = logging.getLogger("evocompliance.inference")
 
 # ===============================
 # Device
@@ -85,9 +87,11 @@ model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
 # Load live-learned weights if available, otherwise use base weights
 LIVE_WEIGHTS_PATH = WEIGHTS_PATH.replace(".pt", "_live.pt")
 if os.path.exists(LIVE_WEIGHTS_PATH):
-    model.load_state_dict(torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE))
+    model.load_state_dict(torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE, weights_only=True))
+    logger.info("Loaded live weights from %s", LIVE_WEIGHTS_PATH)
 else:
-    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
+    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE, weights_only=True))
+    logger.info("Loaded base weights from %s", WEIGHTS_PATH)
 
 model.to(DEVICE)
 model.eval()

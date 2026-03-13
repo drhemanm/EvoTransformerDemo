@@ -40,6 +40,19 @@ export interface LearningStats {
   batch_size: number;
 }
 
+export interface AnalyticsSummary {
+  total: number;
+  by_task: Record<string, number>;
+  by_source: Record<string, number>;
+  avg_confidence: number | null;
+}
+
+export interface AnalyticsData {
+  last_hour: AnalyticsSummary;
+  last_24h: AnalyticsSummary;
+  learning: LearningStats;
+}
+
 export function analyse(text: string, task: string): Promise<AnalyseResult> {
   return request("/analyse", {
     method: "POST",
@@ -60,4 +73,8 @@ export function submitFeedback(
 
 export function getLearningStats(): Promise<LearningStats> {
   return request("/learning-stats");
+}
+
+export function getAnalytics(): Promise<AnalyticsData> {
+  return request("/analytics");
 }
