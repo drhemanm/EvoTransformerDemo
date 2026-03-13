@@ -87,15 +87,29 @@ def test_early_exit(genome, model):
         assert layer.exit_gate is not None
 
 
-def test_model_weights_load():
-    """Model should load saved weights successfully."""
-    import os
-    weights_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "evotransformer_v31_weights.pt")
-    if os.path.exists(weights_path):
-        genome = EvoGenomeV3()
-        model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
-        state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
-        model.load_state_dict(state_dict)
-        assert True
-    else:
-        pytest.skip("Weights file not found")
+def test_model_with_pretrained_embeddings():
+    """Model should work with pretrained embeddings and projection layer."""
+    genome = EvoGenomeV3()
+    # Simulate pretrained embeddings (768-dim like DistilBERT)
+    fake_embeddings = torch.randn(30522, 768)
+    model = EvoTransformerMultiTaskV3(
+        genome, 8, 5, 9, pretrained_embeddings=fake_embeddings
+    )
+    assert model.backbone.embed_projection is not None
+
+    input_ids = torch.randint(0, 30522, (1, 128))
+    attention_mask = torch.ones(1, 128, dtype=torch.long)
+    logits, _, _ = model(input_ids, attention_mask, task="transaction")
+    assert logits.shape == (1, 8)
+
+
+def test_model_without_pretrained_embeddings():
+    """Model should still work without pretrained embeddings (random init)."""
+    genome = EvoGenomeV3()
+    model = EvoTransformerMultiTaskV3(genome, 8, 5, 9)
+    assert model.backbone.embed_projection is None
+
+    input_ids = torch.randint(0, 30522, (1, 128))
+    attention_mask = torch.ones(1, 128, dtype=torch.long)
+    logits, _, _ = model(input_ids, attention_mask, task="transaction")
+    assert logits.shape == (1, 8)

@@ -68,12 +68,21 @@ class EvoTransformerLayerV3(nn.Module):
 # ================================
 
 class EvoTransformerBackboneV3(nn.Module):
-    def __init__(self, genome, vocab_size=30522, max_seq_len=128):
+    def __init__(self, genome, vocab_size=30522, max_seq_len=128, pretrained_embeddings=None):
         super().__init__()
 
         self.genome = genome
 
-        self.token_embedding = nn.Embedding(vocab_size, genome.embed_dim)
+        if pretrained_embeddings is not None:
+            pretrained_dim = pretrained_embeddings.shape[1]
+            self.token_embedding = nn.Embedding.from_pretrained(
+                pretrained_embeddings, freeze=True
+            )
+            self.embed_projection = nn.Linear(pretrained_dim, genome.embed_dim)
+        else:
+            self.token_embedding = nn.Embedding(vocab_size, genome.embed_dim)
+            self.embed_projection = None
+
         self.position_embedding = nn.Embedding(max_seq_len, genome.embed_dim)
 
         self.embedding_dropout = nn.Dropout(genome.dropout)
@@ -91,7 +100,10 @@ class EvoTransformerBackboneV3(nn.Module):
 
         positions = torch.arange(S, device=input_ids.device).unsqueeze(0).expand(B, -1)
 
-        x = self.token_embedding(input_ids) + self.position_embedding(positions)
+        x = self.token_embedding(input_ids)
+        if self.embed_projection is not None:
+            x = self.embed_projection(x)
+        x = x + self.position_embedding(positions)
         x = self.embedding_norm(x)
         x = self.embedding_dropout(x)
 
@@ -120,11 +132,14 @@ class EvoTransformerBackboneV3(nn.Module):
 # ================================
 
 class EvoTransformerMultiTaskV3(nn.Module):
-    def __init__(self, genome, num_txn_labels, num_doc_labels, num_ner_labels):
+    def __init__(self, genome, num_txn_labels, num_doc_labels, num_ner_labels,
+                 pretrained_embeddings=None):
         super().__init__()
 
         self.genome = genome
-        self.backbone = EvoTransformerBackboneV3(genome)
+        self.backbone = EvoTransformerBackboneV3(
+            genome, pretrained_embeddings=pretrained_embeddings
+        )
 
         self.transaction_head = nn.Sequential(
             nn.Linear(genome.embed_dim, genome.embed_dim // 2),
