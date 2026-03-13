@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional
-from inference import predict, learner
+from inference import predict, _model_ready
+import inference
 
 # ===============================
 # Logging
@@ -105,7 +106,8 @@ def _check_auth(x_api_key: Optional[str]):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "0.3.0"}
+    ready = _model_ready.is_set()
+    return {"status": "ok" if ready else "warming_up", "model_ready": ready, "version": "0.3.1"}
 
 
 # ===============================
@@ -139,7 +141,10 @@ def feedback(req: FeedbackRequest, request: Request, x_api_key: str = Header(Non
     logger.info("Feedback request: task=%s, label=%s, text_len=%d",
                 req.task, req.correct_label, len(req.text))
 
-    success, message = learner.add_feedback(req.text, req.task, req.correct_label)
+    if not _model_ready.is_set() or inference.learner is None:
+        raise HTTPException(status_code=503, detail="Model is still warming up. Retry shortly.")
+
+    success, message = inference.learner.add_feedback(req.text, req.task, req.correct_label)
 
     if not success:
         raise HTTPException(status_code=400, detail=message)
@@ -150,7 +155,7 @@ def feedback(req: FeedbackRequest, request: Request, x_api_key: str = Header(Non
     return {
         "status": "accepted",
         "message": message,
-        "stats": learner.get_stats()
+        "stats": inference.learner.get_stats()
     }
 
 
@@ -161,7 +166,9 @@ def feedback(req: FeedbackRequest, request: Request, x_api_key: str = Header(Non
 @app.get("/learning-stats")
 def learning_stats(x_api_key: str = Header(None)):
     _check_auth(x_api_key)
-    return learner.get_stats()
+    if not _model_ready.is_set() or inference.learner is None:
+        raise HTTPException(status_code=503, detail="Model is still warming up.")
+    return inference.learner.get_stats()
 
 
 # ===============================
@@ -197,7 +204,7 @@ def analytics(x_api_key: str = Header(None)):
     return {
         "last_hour": summarize(last_hour),
         "last_24h": summarize(last_day),
-        "learning": learner.get_stats(),
+        "learning": inference.learner.get_stats() if inference.learner else {},
     }
 
 

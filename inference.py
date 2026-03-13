@@ -1,6 +1,7 @@
 import os
 import random
 import logging
+import threading
 import torch
 import torch.nn as nn
 from transformers import DistilBertTokenizer, DistilBertModel
@@ -70,52 +71,27 @@ RISK_MAPPING = {
 
 
 # ===============================
-# Load Tokenizer
+# Load Tokenizer (lightweight, instant)
 # ===============================
 
 tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
 
 # ===============================
-# Load Pretrained Embeddings
-# ===============================
-
-logger.info("Loading DistilBERT pretrained embeddings...")
-_distilbert = DistilBertModel.from_pretrained("distilbert-base-uncased")
-PRETRAINED_EMBEDDINGS = _distilbert.embeddings.word_embeddings.weight.detach().clone()
-del _distilbert  # Free memory — we only need the embedding matrix
-logger.info("Pretrained embeddings loaded: shape %s", PRETRAINED_EMBEDDINGS.shape)
-
-
-# ===============================
-# Load Model
+# Deferred Model Initialization
 # ===============================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_PATH = os.path.join(BASE_DIR, "evotransformer_v31_weights.pt")
 
 genome = EvoGenomeV3()
-model = EvoTransformerMultiTaskV3(
-    genome, 8, 5, 9, pretrained_embeddings=PRETRAINED_EMBEDDINGS
-)
-
-# Load live-learned weights if available (from previous feedback sessions)
-LIVE_WEIGHTS_PATH = WEIGHTS_PATH.replace(".pt", "_live.pt")
-if os.path.exists(LIVE_WEIGHTS_PATH):
-    try:
-        model.load_state_dict(
-            torch.load(LIVE_WEIGHTS_PATH, map_location=DEVICE, weights_only=True)
-        )
-        logger.info("Loaded live weights from %s", LIVE_WEIGHTS_PATH)
-    except RuntimeError:
-        logger.warning("Live weights incompatible with new architecture — will retrain")
-
-model.to(DEVICE)
-model.eval()
+model = None
+learner = None
+_model_ready = threading.Event()
 
 
 # ===============================
-# Auto-Bootstrap Training on Startup
+# Auto-Bootstrap Training Data
 # ===============================
 
 BOOTSTRAP_TRANSACTION_DATA = [
@@ -230,29 +206,21 @@ BOOTSTRAP_DOCUMENT_DATA = [
 
 
 def _run_bootstrap_training():
-    """Train the projection layer and task heads using pretrained embeddings.
-
-    With pretrained embeddings the model already understands language —
-    we only need to train the projection (768→128) and classification heads.
-    This converges in ~50 epochs vs 150+ with random embeddings.
-    """
-    # Skip if already trained (live weights exist and loaded successfully)
+    """Train the projection layer and task heads using pretrained embeddings."""
     live_path = WEIGHTS_PATH.replace(".pt", "_live.pt")
     if os.path.exists(live_path):
         try:
             state = torch.load(live_path, map_location=DEVICE, weights_only=True)
-            # Check if weights are compatible (have projection layer)
             if "backbone.embed_projection.weight" in state:
                 logger.info("Compatible live weights found — skipping bootstrap")
                 return
         except Exception:
             pass
 
-    logger.info("Running bootstrap training with pretrained embeddings (~15s)...")
+    logger.info("Running bootstrap training with pretrained embeddings...")
 
     model.train()
 
-    # Only train the projection layer, task heads, and attention — freeze embeddings
     trainable_params = [p for n, p in model.named_parameters()
                         if "token_embedding" not in n and p.requires_grad]
     optimizer = torch.optim.AdamW(trainable_params, lr=5e-3, weight_decay=0.01)
@@ -289,19 +257,56 @@ def _run_bootstrap_training():
 
     model.eval()
 
-    # Save trained weights
     torch.save(model.state_dict(), WEIGHTS_PATH)
     logger.info("Bootstrap training complete — weights saved")
 
 
-_run_bootstrap_training()
+def _initialize_model():
+    """Heavy initialization: download DistilBERT, build model, bootstrap train.
+
+    Runs in a background thread so the server can bind its port immediately.
+    """
+    global model, learner
+
+    try:
+        logger.info("Loading DistilBERT pretrained embeddings...")
+        distilbert = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        pretrained_embeddings = distilbert.embeddings.word_embeddings.weight.detach().clone()
+        del distilbert
+        logger.info("Pretrained embeddings loaded: shape %s", pretrained_embeddings.shape)
+
+        model = EvoTransformerMultiTaskV3(
+            genome, 8, 5, 9, pretrained_embeddings=pretrained_embeddings
+        )
+
+        # Load live weights if available
+        live_path = WEIGHTS_PATH.replace(".pt", "_live.pt")
+        if os.path.exists(live_path):
+            try:
+                model.load_state_dict(
+                    torch.load(live_path, map_location=DEVICE, weights_only=True)
+                )
+                logger.info("Loaded live weights from %s", live_path)
+            except RuntimeError:
+                logger.warning("Live weights incompatible — will retrain")
+
+        model.to(DEVICE)
+        model.eval()
+
+        _run_bootstrap_training()
+
+        learner = OnlineLearner(model, genome, DEVICE, tokenizer, WEIGHTS_PATH)
+
+        _model_ready.set()
+        logger.info("Model initialization complete — ready to serve predictions")
+
+    except Exception:
+        logger.exception("Model initialization failed")
 
 
-# ===============================
-# Online Learner (Live Feedback)
-# ===============================
-
-learner = OnlineLearner(model, genome, DEVICE, tokenizer, WEIGHTS_PATH)
+# Start initialization in background thread
+_init_thread = threading.Thread(target=_initialize_model, daemon=True)
+_init_thread.start()
 
 
 # ===============================
@@ -309,6 +314,11 @@ learner = OnlineLearner(model, genome, DEVICE, tokenizer, WEIGHTS_PATH)
 # ===============================
 
 def predict(text, task):
+    if not _model_ready.is_set():
+        return {
+            "error": "Model is warming up. Please retry in a few seconds.",
+            "status": "initializing"
+        }
 
     enc = tokenizer(
         text,
